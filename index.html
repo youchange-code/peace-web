@@ -1,22 +1,185 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
+    <meta charset="UTF-8">
     <title>平安便利網</title>
     <style>
-        button { font-size: 24px; padding: 20px; }
+        body { text-align: center; padding: 50px; font-family: Arial, sans-serif; }
+        /* 美化下拉選單 */
+        #lang-select {
+            position: absolute; top: 20px; right: 20px; padding: 12px;
+            font-size: 16px; border-radius: 8px; border: 1px solid #ccc;
+            background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            cursor: pointer; transition: all 0.3s;
+        }
+        #lang-select:hover { box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        /* 美化一般按鈕（藍底） */
+        .normal-btn {
+            font-size: 20px; padding: 15px 25px; margin: 10px;
+            background: #007BFF; color: white; border: none; border-radius: 10px;
+            cursor: pointer; box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+        .normal-btn:hover { background: #0056b3; transform: translateY(-2px); box-shadow: 0 5px 12px rgba(0,0,0,0.3); }
+        /* 美化緊急救援按鈕（紅底） */
+        #emergency {
+            font-size: 32px; padding: 25px 60px; margin-top: 30px;
+            background: #ff4444; color: white; border: none; border-radius: 12px;
+            cursor: pointer; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+        #emergency:hover { background: #cc0000; transform: translateY(-3px); box-shadow: 0 6px 14px rgba(0,0,0,0.3); }
+        /* 其他樣式 */
+        input { padding: 12px; margin: 10px; border-radius: 6px; border: 1px solid #ccc; }
+        div { margin-top: 20px; font-size: 18px; }
+        #map { height: 300px; width: 80%; margin: 20px auto; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
-    <h1>平安便利網</h1>
-    <button onclick="emergencyCall('medical')">一鍵求助</button>
+    <!-- 語言下拉選單（右上方） -->
+    <select id="lang-select" onchange="switchLang(this.value)">
+        <option value="zh">中文</option>
+        <option value="vi">Tiếng Việt</option>
+        <option value="id">Bahasa Indonesia</option>
+        <option value="th">ภาษาไทย</option>
+    </select>
+
+    <h1 id="title">平安便利網</h1>
+    
+    <!-- 健康提醒 -->
+    <button id="reminder" class="normal-btn" onclick="setReminder()">健康提醒</button>
+    <div id="reminder-msg"></div>
+
+    <!-- 社區求助 -->
+    <button id="community" class="normal-btn" onclick="getCommunityHelp()">社區求助</button>
+    <div id="community-msg"></div>
+
+    <!-- 通勤查詢 -->
+    <input id="destination" placeholder="輸入目的地">
+    <button id="route" class="normal-btn" onclick="checkRoute()">查詢路線</button>
+    <div id="route-msg"></div>
+
+    <!-- 緊急救援（最下方，含地圖） -->
+    <button id="emergency" onclick="triggerEmergency()">緊急救援</button>
+    <div id="message"></div>
+    <div id="map"></div>
+
+    <!-- Google Maps API（使用您的金鑰） -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCKYkikd4bdDThjrP8SxM1E5pibP7rpWKw&callback=initMap" async defer></script>
     <script>
-        function emergencyCall(type) {
-            navigator.geolocation.getCurrentPosition(position => {
-                let location = `緯度: ${position.coords.latitude}, 經度: ${position.coords.longitude}`;
-                if (type === "medical") {
-                    alert("撥打119，位置：" + location);
-                }
+        let map; // 地圖變數
+        let currentLang = 'zh'; // 預設語言
+
+        // 初始化地圖（預設隱藏）
+        function initMap() {
+            map = new google.maps.Map(document.getElementById("map"), {
+                center: { lat: 24.9954304, lng: 121.2940288 }, // 預設蘆竹區位置
+                zoom: 14
             });
+            document.getElementById("map").style.display = "none"; // 初始隱藏
+        }
+
+        // 語言切換
+        function switchLang(lang) {
+            currentLang = lang;
+            const translations = {
+                zh: { title: "平安便利網", emergency: "緊急救援", reminder: "健康提醒", community: "社區求助", route: "查詢路線", destination: "輸入目的地", locationError: "無法獲取位置，請檢查是否允許定位權限！", browserError: "您的瀏覽器不支援定位功能！", noDest: "請輸入目的地！" },
+                vi: { title: "Mạng Tiện Lợi Bình An", emergency: "Cứu Hộ Khẩn Cấp", reminder: "Nhắc Nhở Sức Khỏe", community: "Hỗ Trợ Cộng Đồng", route: "Tra Cứu Lộ Trình", destination: "Nhập điểm đến", locationError: "Không thể lấy vị trí, vui lòng kiểm tra quyền định vị!", browserError: "Trình duyệt của bạn không hỗ trợ định vị!", noDest: "Vui lòng nhập điểm đến!" },
+                id: { title: "Jaringan Kenyamanan Aman", emergency: "Bantuan Darurat", reminder: "Pengingat Kesehatan", community: "Bantuan Komunitas", route: "Cari Rute", destination: "Masukkan tujuan", locationError: "Tidak dapat mendapatkan lokasi, periksa izin lokasi!", browserError: "Browser Anda tidak mendukung fungsi lokasi!", noDest: "Harap masukkan tujuan!" },
+                th: { title: "เครือข่ายความสะดวกปลอดภัย", emergency: "ช่วยเหลือฉุกเฉิน", reminder: "เตือนสุขภาพ", community: "ช่วยเหลือชุมชน", route: "ค้นหาเส้นทาง", destination: "ป้อนจุดหมายปลายทาง", locationError: "ไม่สามารถรับตำแหน่งได้ กรุณาตรวจสอบการอนุญาตตำแหน่ง!", browserError: "เบราว์เซอร์ของคุณไม่รองรับฟังก์ชันตำแหน่ง!", noDest: "กรุณาป้อนจุดหมายปลายทาง!" }
+            };
+
+            document.getElementById("title").innerText = translations[lang].title;
+            document.getElementById("emergency").innerText = translations[lang].emergency;
+            document.getElementById("reminder").innerText = translations[lang].reminder;
+            document.getElementById("community").innerText = translations[lang].community;
+            document.getElementById("route").innerText = translations[lang].route;
+            document.getElementById("destination").placeholder = translations[lang].destination;
+        }
+
+        // 緊急救援（自動獲取位置）
+        function triggerEmergency() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const latitude = position.coords.latitude;
+                        const longitude = position.coords.longitude;
+                        const messages = {
+                            zh: `撥打119，位置：緯度: ${latitude}, 經度: ${longitude}`,
+                            vi: `Gọi 119, vị trí: Vĩ độ: ${latitude}, Kinh độ: ${longitude}`,
+                            id: `Panggil 119, lokasi: Lintang: ${latitude}, Bujur: ${longitude}`,
+                            th: `โทร 119, ตำแหน่ง: ละติจูด: ${latitude}, ลองจิจูด: ${longitude}`
+                        };
+                        document.getElementById("message").innerText = messages[currentLang];
+
+                        // 顯示地圖並標記自動獲取的位置
+                        document.getElementById("map").style.display = "block";
+                        const userLocation = { lat: latitude, lng: longitude };
+                        map.setCenter(userLocation);
+                        new google.maps.Marker({
+                            position: userLocation,
+                            map: map,
+                            title: currentLang === 'zh' ? "您的位置" : currentLang === 'vi' ? "Vị trí của bạn" : currentLang === 'id' ? "Lokasi Anda" : "ตำแหน่งของคุณ"
+                        });
+                    },
+                    (error) => {
+                        document.getElementById("message").innerText = 
+                            currentLang === 'zh' ? "無法獲取位置，請檢查是否允許定位權限！" :
+                            currentLang === 'vi' ? "Không thể lấy vị trí, vui lòng kiểm tra quyền định vị!" :
+                            currentLang === 'id' ? "Tidak dapat mendapatkan lokasi, periksa izin lokasi!" :
+                            "ไม่สามารถรับตำแหน่งได้ กรุณาตรวจสอบการอนุญาตตำแหน่ง!";
+                    }
+                );
+            } else {
+                document.getElementById("message").innerText = 
+                    currentLang === 'zh' ? "您的瀏覽器不支援定位功能！" :
+                    currentLang === 'vi' ? "Trình duyệt của bạn không hỗ trợ định vị!" :
+                    currentLang === 'id' ? "Browser Anda tidak mendukung fungsi lokasi!" :
+                    "เบราว์เซอร์ของคุณไม่รองรับฟังก์ชันตำแหน่ง!";
+            }
+        }
+
+        // 健康提醒
+        function setReminder() {
+            const now = new Date().toLocaleTimeString();
+            const messages = {
+                zh: `現在 ${now}，記得喝水或服藥！`,
+                vi: `Bây giờ ${now}, nhớ uống nước hoặc dùng thuốc!`,
+                id: `Sekarang ${now}, ingat minum air atau obat!`,
+                th: `ตอนนี้ ${now} จำไว้ว่าต้องดื่มน้ำหรือกินยา!`
+            };
+            document.getElementById("reminder-msg").innerText = messages[currentLang];
+        }
+
+        // 社區求助
+        function getCommunityHelp() {
+            const messages = {
+                zh: "聯繫張伯（03-123-4567），可借工具或接送",
+                vi: "Liên hệ chú Trương (03-123-4567), có thể mượn dụng cụ hoặc đưa đón",
+                id: "Hubungi Pak Trương (03-123-4567), bisa pinjam alat atau antar-jemput",
+                th: "ติดต่อลุงจาง (03-123-4567) สามารถยืมเครื่องมือหรือรับ-ส่งได้"
+            };
+            document.getElementById("community-msg").innerText = messages[currentLang];
+        }
+
+        // 通勤查詢
+        function checkRoute() {
+            const dest = document.getElementById("destination").value;
+            if (dest) {
+                const messages = {
+                    zh: `前往 ${dest}：搭公車至蘆竹站，步行10分鐘`,
+                    vi: `Đi đến ${dest}: Đi xe buýt đến trạm Lô Trúc, đi bộ 10 phút`,
+                    id: `Menuju ${dest}: Naik bus ke stasiun Luzhu, jalan kaki 10 menit`,
+                    th: `ไปที่ ${dest}: ขึ้นรถบัสไปสถานีลู่จู้ เดิน 10 นาที`
+                };
+                document.getElementById("route-msg").innerText = messages[currentLang];
+            } else {
+                document.getElementById("route-msg").innerText = 
+                    currentLang === 'zh' ? "請輸入目的地！" :
+                    currentLang === 'vi' ? "Vui lòng nhập điểm đến!" :
+                    currentLang === 'id' ? "Harap masukkan tujuan!" :
+                    "กรุณาป้อนจุดหมายปลายทาง!";
+            }
         }
     </script>
 </body>
