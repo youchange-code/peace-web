@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>平安便利網</title>
+    <style>
+        button { font-size: 24px; padding: 20px; }
+    </style>
+</head>
+<body>
+    <h1>平安便利網</h1>
+    <button onclick="emergencyCall('medical')">一鍵求助</button>
+    <script>
+        function emergencyCall(type) {
+            navigator.geolocation.getCurrentPosition(position => {
+                let location = `緯度: ${position.coords.latitude}, 經度: ${position.coords.longitude}`;
+                if (type === "medical") {
+                    alert("撥打119，位置：" + location);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
